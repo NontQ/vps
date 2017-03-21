@@ -1,0 +1,73 @@
+# Flush any existing rules
+sudo iptables -F
+
+# Set the policy of the FORWARD chain to DROP
+
+sudo iptables -P FORWARD DROP
+
+# Set the OUTPUT policy to ACCEPT
+
+sudo iptables -P OUTPUT ACCEPT
+
+# Allow the loopback interface
+
+sudo iptables -A INPUT -i lo -j ACCEPT
+
+# Allow Established Related Incoming Connections
+
+sudo iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# Drop non-conforming packets, such as malformed headers, etc
+
+sudo iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
+
+# Block remote packets claiming to be from a loopback address
+
+sudo iptables -A INPUT -s 127.0.0.0/8 ! -i lo -j DROP
+
+# Allow ping
+
+sudo iptables -A INPUT -p icmp --icmp-type 8 -m conntrack --ctstate NEW -j ACCEPT
+
+# Allow SSH, HTTP, HTTPS
+
+sudo iptables -A INPUT -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+
+# Allow VSFTPD, MAIL, DNS
+
+sudo iptables -A INPUT -p tcp -m multiport --dports 20,21,25,53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+
+# Set the INPUT policy to DROP
+
+sudo iptables -P INPUT DROP
+
+# Below are extra rules for protection, skip to the next part if your satisfied with the current rules
+
+# Prevent DoS attack
+
+sudo iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT
+
+# Limit connections per source IP
+
+sudo iptables -A INPUT -p tcp -m connlimit --connlimit-above 111 -j REJECT --reject-with tcp-reset
+
+# Limit new TCP connections per second per source IP
+
+sudo iptables -A INPUT -p tcp -m conntrack --ctstate NEW -m limit --limit 60/s --limit-burst 20 -j ACCEPT
+
+sudo iptables -A INPUT -p tcp -m conntrack --ctstate NEW -j DROP
+
+# SSH brute-force protection
+
+sudo iptables -A INPUT -p tcp --dport ssh -m conntrack --ctstate NEW -m recent --set
+
+sudo iptables -A INPUT -p tcp --dport ssh -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 10 -j DROP
+
+# Protection against port scanning
+
+sudo iptables -N port-scanning
+
+sudo iptables -A port-scanning -p tcp --tcp-flags SYN,ACK,FIN,RST RST -m limit --limit 1/s --limit-burst 2 -j RETURN
+
+sudo iptables -A port-scanning -j DROP
+
